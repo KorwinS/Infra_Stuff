@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Creates a Memcached Single Instance or a Memcached Cluster"
+Parameters:
+  NodeType:
+    Default: cache.r3.large
+    Description: The instance type to use for the database.
+    Type: String
+  GroupName: 
+    Default: "MemcachedSG"
+    Type: String
+  CidrIp:
+    Default: "172.31.0.0/16"
+    Type: String
+Resources:
+  ElasticacheSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Elasticache Security Group"
+      VpcId: !ImportValue myVpcId-Metrics
+      GroupName: !Ref GroupName
+      SecurityGroupIngress:
+        -
+          IpProtocol: "tcp"
+          FromPort: "11211"
+          ToPort: "11211"
+          CidrIp: !Ref CidrIp
+  ECSubnetGroup:
+    Type: "AWS::ElastiCache::SubnetGroup"
+    Properties:
+      CacheSubnetGroupName: "GrafanaECSubnetGroup"
+      Description: "SubnetGroup for EC"
+      SubnetIds:
+        - !ImportValue myEc2PrivateSubnet1-Metrics
+        - !ImportValue myEc2PrivateSubnet2-Metrics
+  ElasticacheCluster:
+    Type: "AWS::ElastiCache::CacheCluster"
+    Properties:
+      AutoMinorVersionUpgrade: "true"
+      Engine: "memcached"
+      CacheNodeType: !Ref NodeType
+      NumCacheNodes: "1"
+      CacheSubnetGroupName: !Ref ECSubnetGroup
+      VpcSecurityGroupIds:
+        -
+          Fn::GetAtt:
+            - "ElasticacheSecurityGroup"
+            - "GroupId"
+Outputs:
+  Memcache:
+    Description: Connection string for memcached
+    Value: !Join 
+      - ''
+      - - !GetAtt
+          - ElasticacheCluster
+          - ConfigurationEndpoint.Address
+        - ':'
+        - !GetAtt 
+          - ElasticacheCluster
+          - ConfigurationEndpoint.Port
+    Export:
+      Name: !Sub "${AWS::StackName}-Memcache"
